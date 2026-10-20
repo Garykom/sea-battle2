@@ -1078,12 +1078,35 @@
         this.sunkShips = 0;
       }
 
-      applyShot(r, c, res, around) {
+      applyShot(r, c, res, around, size = 0) {
         if (res === 'miss') this.grid[r][c] = 'miss';
         else if (res === 'hit') this.grid[r][c] = 'hit';
         else if (res === 'sunk') {
           this.grid[r][c] = 'sunk';
           this.sunkShips++;
+          // Все клетки потопленного корабля (наша вереница 'hit' вдоль линии) — в стиль 'sunk'.
+          const markRun = (dr, dc) => {
+            const run = [];
+            for (let k = -1; ; k -= 1) {
+              const rr = r + dr * k, cc = c + dc * k;
+              if (rr < 0 || cc < 0 || rr >= BOARD_SIZE || cc >= BOARD_SIZE) break;
+              if (this.grid[rr][cc] !== 'hit') break;
+              run.push([rr, cc]);
+            }
+            for (let k = 1; ; k += 1) {
+              const rr = r + dr * k, cc = c + dc * k;
+              if (rr < 0 || cc < 0 || rr >= BOARD_SIZE || cc >= BOARD_SIZE) break;
+              if (this.grid[rr][cc] !== 'hit') break;
+              run.push([rr, cc]);
+            }
+            return run;
+          };
+          let run = markRun(0, 1);
+          if (size && run.length + 1 !== size) {
+            const vertical = markRun(1, 0);
+            if (!run.length || (size && vertical.length + 1 === size)) run = vertical;
+          }
+          run.forEach(([rr, cc]) => { this.grid[rr][cc] = 'sunk'; });
           (around || []).forEach(({ r: nr, c: nc }) => {
             if (this.grid[nr][nc] === null) this.grid[nr][nc] = 'miss';
           });
@@ -1643,15 +1666,17 @@
           const r = parseInt(cell.dataset.row);
           const c = parseInt(cell.dataset.col);
           const state = src[r][c];
+          // Поле ИИ хранит объекты {ship, index, state}, RemoteView — строки.
+          const st = state && typeof state === 'object' ? state.state : state;
 
           cell.className = 'cell';
-          if (state && state.state === 'ship') {
+          if (st === 'ship') {
             if (revealShips) cell.classList.add('ship');
-          } else if (state && state.state === 'hit') {
+          } else if (st === 'hit') {
             cell.classList.add('hit');
-          } else if (state && state.state === 'sunk') {
+          } else if (st === 'sunk') {
             cell.classList.add('sunk');
-          } else if (state === 'miss') {
+          } else if (st === 'miss') {
             cell.classList.add('miss');
           }
         });
@@ -1890,7 +1915,7 @@
               break;
             }
 
-            this.remote.applyShot(data.r, data.c, data.res, data.around);
+            this.remote.applyShot(data.r, data.c, data.res, data.around, data.size || 0);
             this.renderEnemyBoard();
             this.updateScores();
             this.enemyFleetStatus.textContent = `Потоплено кораблей: ${this.remote.sunkShips} / ${TOTAL_SHIPS}`;
@@ -1970,7 +1995,7 @@
 
     // Запуск игры при загрузке документа
     window.addEventListener('DOMContentLoaded', () => {
-      new GameUI();
+      window.game = new GameUI(); // доступно из консоли для отладки
     });
   </script>
 </body>
